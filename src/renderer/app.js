@@ -591,14 +591,19 @@ function playRange(seg) {
   renderSeekSegs();
 }
 
+let isScrubbing = false;  // true khi user đang kéo thanh seek
+
 function frame() {
   const dur = curDuration();
   const cur = video.currentTime || 0;
   if (state.playRangeEnd != null && cur >= state.playRangeEnd) { video.pause(); state.playRangeEnd = null; }
-  $('#timecode').innerHTML = `${fmtClock(cur)} <span>/ ${fmtClock(dur)}</span>`;
-  const pct = dur ? (cur / dur) * 100 : 0;
-  $('#seekFill').style.width = pct + '%';
-  $('#seekHead').style.left = pct + '%';
+  // Khi đang scrub: initSeek đã cập nhật thanh theo scrubTime — frame() bỏ qua để không ghi đè
+  if (!isScrubbing) {
+    $('#timecode').innerHTML = `${fmtClock(cur)} <span>/ ${fmtClock(dur)}</span>`;
+    const pct = dur ? (cur / dur) * 100 : 0;
+    $('#seekFill').style.width  = pct + '%';
+    $('#seekHead').style.left   = pct + '%';
+  }
   requestAnimationFrame(frame);
 }
 
@@ -629,20 +634,75 @@ async function requestProxy() {
 }
 api.onProxyProgress((d) => { $('#proxyPct').textContent = Math.round(d.ratio * 100) + '%'; });
 
-// seek bar
+// seek bar — mượt: UI update ngay, video.currentTime throttle 80ms
 (function initSeek() {
-  const seek = $('#seek');
-  let down = false;
-  const at = (e) => {
+  const seek     = $('#seek');
+  const fill     = $('#seekFill');
+  const head     = $('#seekHead');
+  const timecode = $('#timecode');
+
+  let down        = false;
+  let scrubTime   = 0;   // thời điểm đang scrub (hiện trên UI)
+  let lastSeekMs  = 0;   // timestamp lần cuối set currentTime
+  let seekPending = false;
+  const THROTTLE  = 80;  // ms — chỉ set currentTime mỗi 80ms khi kéo
+
+  function updateBar(t) {
+    const dur = curDuration();
+    const pct = dur ? (t / dur) * 100 : 0;
+    fill.style.width  = pct + '%';
+    head.style.left   = pct + '%';
+    timecode.innerHTML = `${fmtClock(t)} <span>/ ${fmtClock(dur)}</span>`;
+  }
+
+  function doSeek(t) {
+    const now = performance.now();
+    if (now - lastSeekMs >= THROTTLE) {
+      video.currentTime = clamp(t, 0, curDuration());
+      lastSeekMs = now;
+      seekPending = false;
+    } else if (!seekPending) {
+      seekPending = true;
+      setTimeout(() => {
+        if (down) { video.currentTime = clamp(scrubTime, 0, curDuration()); lastSeekMs = performance.now(); }
+        seekPending = false;
+      }, THROTTLE - (performance.now() - lastSeekMs));
+    }
+  }
+
+  function onMove(e) {
     const r = seek.getBoundingClientRect();
+    const t = clamp(((e.clientX - r.left) / r.width) * curDuration(), 0, curDuration());
+    scrubTime = t;
     state.playRangeEnd = null;
-    seekTo(((e.clientX - r.left) / r.width) * curDuration());
-  };
-  seek.addEventListener('pointerdown', (e) => { if (!selected()) return; down = true; seek.setPointerCapture(e.pointerId); at(e); });
-  seek.addEventListener('pointermove', (e) => { if (down) at(e); });
-  seek.addEventListener('pointerup', () => { down = false; });
-  seek.addEventListener('pointercancel', () => { down = false; });
+    updateBar(t);   // visual ngay lập tức
+    doSeek(t);      // video.currentTime throttled
+  }
+
+  seek.addEventListener('pointerdown', (e) => {
+    if (!selected()) return;
+    down = true;
+    isScrubbing = true;
+    seek.setPointerCapture(e.pointerId);
+    seek.classList.add('scrubbing');
+    onMove(e);
+  });
+  seek.addEventListener('pointermove', (e) => { if (down) onMove(e); });
+  seek.addEventListener('pointerup', () => {
+    if (!down) return;
+    down = false;
+    isScrubbing = false;
+    seek.classList.remove('scrubbing');
+    // Seek chính xác đến vị trí cuối cùng
+    video.currentTime = clamp(scrubTime, 0, curDuration());
+  });
+  seek.addEventListener('pointercancel', () => {
+    down = false;
+    isScrubbing = false;
+    seek.classList.remove('scrubbing');
+  });
 })();
+
 
 $('#btnPlay').addEventListener('click', togglePlay);
 video.addEventListener('click', togglePlay);
