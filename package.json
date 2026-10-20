@@ -1,0 +1,16 @@
+{
+  "name": "vcut-studio",
+  "version": "1.0.0",
+  "description": "VCut Studio - Cắt, ghép, chỉnh sửa video nhanh bằng FFmpeg",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "keywords": ["video", "ffmpeg", "cut", "merge"],
+  "license": "ISC",
+  "dependencies": {
+    "electron": "^44.9.1",
+    "ffmpeg-static": "^5.3.0",
+    "ffprobe-static": "^3.1.0"
+  }
+}

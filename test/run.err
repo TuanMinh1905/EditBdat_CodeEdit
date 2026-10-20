@@ -1,0 +1,2 @@
+(electron) 'console-message' arguments are deprecated and will be removed. Please use Event<WebContentsConsoleMessageEventParams> object instead.
+[30864:1020/151348.121:ERROR:content\browser\network_service_instance_impl.cc:650] Network service crashed or was terminated, restarting service.

@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; media-src 'self' file: blob:; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="VCut Studio - cắt nhiều đoạn, ghép video, tắt tiếng, crop, xoay và đổi tốc độ bằng FFmpeg." />
+  <title>VCut Studio — Cắt &amp; Ghép Video</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="bg-orbs"></div>
+
+  <div class="app" id="app">
+    <!-- ================= TOP BAR ================= -->
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-logo"><span data-i="scissors"></span></div>
+        <div>
+          <h1>VCut <span>Studio</span></h1>
+          <small>Cắt nhiều đoạn • Ghép • Chỉnh sửa nhanh bằng FFmpeg</small>
+        </div>
+      </div>
+      <div class="top-hints">
+        <span><kbd>Space</kbd> Phát / dừng</span>
+        <span><kbd>←</kbd><kbd>→</kbd> Tua 1s</span>
+        <span><kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> Tua 0.1s</span>
+      </div>
+    </header>
+
+    <!-- ================= LIBRARY ================= -->
+    <aside class="panel library" id="library">
+      <div class="panel-head">
+        <h2><span data-i="film"></span> Thư viện video</h2>
+        <button class="btn sm" id="btnAdd"><span data-i="plus"></span> Thêm</button>
+      </div>
+      <div class="panel-body scroll">
+        <div class="dropzone" id="dropZone">
+          <span class="big" data-i="upload"></span>
+          <b>Kéo thả video vào đây</b>
+          <small>hoặc bấm để chọn (nhiều file cùng lúc)</small>
+        </div>
+        <div class="src-list" id="sourceList"></div>
+      </div>
+    </aside>
+
+    <!-- ================= CENTER ================= -->
+    <main class="center">
+      <section class="stage-wrap" id="stageWrap">
+        <!-- Zoom toolbar -->
+        <div class="stage-toolbar" id="stageToolbar">
+          <button class="zoom-btn" id="btnZoomOut" title="Thu nhỏ (Ctrl + -)">
+            <span data-i="minus"></span>
+          </button>
+          <button class="zoom-btn reset-zoom" id="btnZoomReset" title="Đặt lại về vừa khung">100%</button>
+          <button class="zoom-btn" id="btnZoomIn" title="Phóng to (Ctrl + +)">
+            <span data-i="zoomIn"></span>
+          </button>
+          <div class="zoom-sep"></div>
+          <button class="zoom-btn reset-zoom" id="btnZoomFit" title="Vừa khung hình"><span data-i="maximize"></span></button>
+          <span class="zoom-label" id="zoomLabel">fit</span>
+        </div>
+        <!-- Viewport chứa stage có thể scroll/zoom -->
+        <div class="stage-viewport" id="stageViewport">
+          <div class="stage-letterbox"></div>
+          <div class="stage" id="stage">
+            <div class="stage-inner" id="stageInner">
+              <video id="video" preload="metadata" playsinline></video>
+              <div class="crop-layer" id="cropLayer">
+                <div class="crop-box" id="cropBox">
+                  <span class="crop-tag" id="cropTag">—</span>
+                  <i class="crop-h" data-h="nw"></i><i class="crop-h" data-h="n"></i><i class="crop-h" data-h="ne"></i>
+                  <i class="crop-h" data-h="e"></i><i class="crop-h" data-h="se"></i><i class="crop-h" data-h="s"></i>
+                  <i class="crop-h" data-h="sw"></i><i class="crop-h" data-h="w"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="stage-empty" id="stageEmpty">
+            <div>
+              <span class="ic" data-i="film"></span>
+              <p><b style="color:var(--muted)">Chưa có video</b><br />Thêm video ở cột bên trái để bắt đầu</p>
+            </div>
+          </div>
+          <div class="stage-badges" id="stageBadges"></div>
+          <div class="overlay-msg" id="proxyOverlay">
+            <div class="box">
+              <div class="spinner"></div>
+              <p id="proxyText">Định dạng này trình duyệt không phát được trực tiếp.<br />Đang tạo bản xem trước… <b id="proxyPct">0%</b></p>
+            </div>
+          </div>
+          <div class="fit-badge" id="fitBadge"></div>
+        </div>
+      </section>
+
+      <section class="panel transport">
+        <div class="t-row">
+          <button class="play-btn" id="btnPlay" title="Phát / dừng (Space)"><span data-i="play" id="playIcon"></span></button>
+          <div class="timecode" id="timecode">0:00.0 <span>/ 0:00.0</span></div>
+          <div class="seek" id="seek">
+            <div class="seek-track"><div class="seek-fill" id="seekFill"></div></div>
+            <div id="seekSegs"></div>
+            <div class="seek-head" id="seekHead" style="left:0"></div>
+          </div>
+          <span class="speed-tag" id="speedTag"></span>
+        </div>
+      </section>
+
+      <section class="panel cuts" id="cutsPanel">
+        <div class="panel-head">
+          <h2><span data-i="scissors"></span> Các đoạn cần cắt <span class="cuts-head-note" id="cutsNote"></span></h2>
+          <div class="cuts-foot">
+            <button class="btn sm" id="btnPaste"><span data-i="clipboard"></span> Dán danh sách</button>
+            <button class="btn sm primary" id="btnAddCut"><span data-i="plus"></span> Thêm đoạn</button>
+          </div>
+        </div>
+        <div class="panel-body scroll" id="cutsList"></div>
+      </section>
+    </main>
+
+    <!-- ================= INSPECTOR ================= -->
+    <aside class="panel" id="inspector">
+      <div class="panel-head"><h2><span data-i="layers"></span> Chỉnh sửa &amp; Xuất</h2></div>
+      <div class="panel-body scroll">
+
+        <div class="group">
+          <div class="group-title">Hiệu chỉnh</div>
+
+          <div class="opt" id="optMute">
+            <div class="opt-l"><span class="i" data-i="volumex"></span><div>Tắt tiếng<small>Bỏ toàn bộ âm thanh</small></div></div>
+            <div class="switch"></div>
+          </div>
+
+          <div class="opt" id="optCrop">
+            <div class="opt-l"><span class="i" data-i="crop"></span><div>Crop khung hình<small>Kéo khung trên video</small></div></div>
+            <div class="switch"></div>
+          </div>
+          <div class="opt-sub" id="cropSub">
+            <div class="chips" id="cropPresets">
+              <button class="chip on" data-r="free">Tự do</button>
+              <button class="chip" data-r="16:9">16:9</button>
+              <button class="chip" data-r="9:16">9:16</button>
+              <button class="chip" data-r="1:1">1:1</button>
+              <button class="chip" data-r="4:3">4:3</button>
+              <button class="chip" data-r="4:5">4:5</button>
+              <button class="chip" data-r="reset">Đặt lại</button>
+            </div>
+            <div class="hint on" id="cropInfo" style="background:rgba(139,108,255,.07);border-color:rgba(139,108,255,.25)"></div>
+          </div>
+
+          <div class="group-title" style="margin-top:14px">Xoay / Lật</div>
+          <div class="tool-row" id="rotateRow">
+            <button class="tool" data-act="ccw"><span class="i" data-i="ccw"></span>Trái 90°</button>
+            <button class="tool" data-act="cw"><span class="i" data-i="cw"></span>Phải 90°</button>
+            <button class="tool" data-act="fh"><span class="i" data-i="fliph"></span>Lật ngang</button>
+            <button class="tool" data-act="fv"><span class="i" data-i="flipv"></span>Lật dọc</button>
+          </div>
+          <div class="hint" id="rotateHint"></div>
+
+          <div class="group-title" style="margin-top:14px">Tốc độ phát</div>
+          <div class="chips" id="speedChips">
+            <button class="chip" data-s="0.25">0.25×</button>
+            <button class="chip" data-s="0.5">0.5×</button>
+            <button class="chip" data-s="0.75">0.75×</button>
+            <button class="chip on" data-s="1">1×</button>
+            <button class="chip" data-s="1.25">1.25×</button>
+            <button class="chip" data-s="1.5">1.5×</button>
+            <button class="chip" data-s="2">2×</button>
+            <button class="chip" data-s="3">3×</button>
+            <button class="chip" data-s="4">4×</button>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="group-title">Cách xuất</div>
+          <div class="seg" id="outputSeg">
+            <button data-v="separate" class="on grad">Từng đoạn</button>
+            <button data-v="merge">Ghép 1 video</button>
+            <button data-v="both">Cả hai</button>
+          </div>
+
+          <div class="group-title" style="margin-top:14px">Chế độ xử lý</div>
+          <div class="seg" id="modeSeg">
+            <button data-v="fast"><span data-i="bolt"></span> Nhanh</button>
+            <button data-v="precise" class="on grad"><span data-i="target"></span> Chính xác</button>
+          </div>
+          <div class="hint on" id="modeHint" style="background:rgba(139,108,255,.07);border-color:rgba(139,108,255,.25)"></div>
+
+          <div id="qualityWrap" style="margin-top:12px">
+            <div class="seg" id="qualitySeg">
+              <button data-v="high" class="on">Chất lượng cao</button>
+              <button data-v="balanced">Cân bằng (nhẹ hơn)</button>
+            </div>
+          </div>
+
+          <div class="dir-row">
+            <div class="dir-label" id="dirLabel">Lưu cạnh video gốc</div>
+            <button class="btn sm" id="btnDir"><span data-i="folder"></span></button>
+            <button class="btn sm ghost" id="btnDirReset" title="Về mặc định" style="display:none"><span data-i="x"></span></button>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="group-title">Thứ tự xuất / ghép <span style="text-transform:none;letter-spacing:0;font-weight:500">(kéo để đổi)</span></div>
+          <div class="order-list" id="orderList"></div>
+          <div class="order-sum" id="orderSum"></div>
+        </div>
+      </div>
+
+      <div class="inspector-foot">
+        <button class="btn primary export-btn" id="btnExport"><span data-i="download"></span> Xuất video</button>
+        <div class="export-meta" id="exportMeta"></div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ================= MODALS ================= -->
+  <div class="modal" id="pasteModal">
+    <div class="modal-card">
+      <div class="mh"><h3>Dán danh sách đoạn cắt</h3><button class="icon-btn" data-close><span data-i="x"></span></button></div>
+      <div class="mb">
+        <p class="sm">Mỗi dòng một đoạn: <code>bắt đầu - kết thúc</code>. Hỗ trợ <code>1p12s</code>, <code>1m12s</code>, <code>1:12</code>, <code>01:12:30</code>, <code>72</code> (giây)…</p>
+        <textarea id="pasteText" spellcheck="false" placeholder="1p12s - 1p15s&#10;1p22s - 1p30s&#10;3p45s - 4p15s"></textarea>
+        <p class="sm" id="pasteInfo" style="margin-top:10px"></p>
+      </div>
+      <div class="mf">
+        <button class="btn" data-close>Huỷ</button>
+        <button class="btn primary" id="btnPasteOk"><span data-i="check"></span> Thêm các đoạn</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="exportModal">
+    <div class="modal-card">
+      <div class="mh"><h3 id="exTitle">Đang xuất video…</h3></div>
+      <div class="mb">
+        <div class="progress" id="exBar"><div id="exFill"></div></div>
+        <div class="pg-row"><span id="exLabel">Chuẩn bị…</span><b id="exPct">0%</b></div>
+        <div id="exResults"></div>
+        <div class="note" id="exNotes"></div>
+      </div>
+      <div class="mf">
+        <button class="btn danger" id="btnCancelExport">Huỷ</button>
+        <button class="btn" id="btnOpenFolder" style="display:none"><span data-i="folder"></span> Mở thư mục</button>
+        <button class="btn primary" id="btnCloseExport" style="display:none">Xong</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toasts"></div>
+  <script src="app.js"></script>
+</body>
+</html>

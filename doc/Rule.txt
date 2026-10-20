@@ -1,0 +1,6 @@
+Rule là file AGENT.MD trong Folder .Agents á 
+
+Tại folder .agent là để tự động đọc cái rule đó mỗi khi code
+
+Từ giờ trở đi, mỗi khi AI thêm tính năng mới cho project này, file này sẽ được đọc tự động để đảm bảo code luôn đúng pattern — không bao giờ sai kiến trúc như lỗi const api duplicate hay require('url') đã từng xảy ra.
+
