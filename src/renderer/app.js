@@ -44,6 +44,8 @@ const ICONS = {
   minus: '<path d="M5 12h14"/>',
   zoomIn: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35M11 8v6M8 11h6"/>',
   maximize: '<path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/>',
+  eye: '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>',
+  eyeOff: '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>',
 };
 const svg = (n) => `<svg class="i" viewBox="0 0 24 24">${ICONS[n] || ''}</svg>`;
 function hydrateIcons(root = document) {
@@ -461,6 +463,7 @@ function updateOptionsUI() {
   $('#optMute').classList.toggle('on', o.mute);
   $('#optCrop').classList.toggle('on', o.cropOn);
   $('#cropSub').classList.toggle('on', o.cropOn);
+  if (!o.cropOn) exitCropPreview(); // tự thoát preview khi tắt crop
   $$('#cropPresets .chip').forEach((c) => {
     const r = c.dataset.r;
     c.classList.toggle('on', r === 'reset' ? false : (r === 'free' ? !o.cropRatio : o.cropRatio && Math.abs(o.cropRatio - (+r.split(':')[0] / +r.split(':')[1])) < 1e-6));
@@ -601,11 +604,79 @@ document.addEventListener('keydown', (e) => {
   else if (e.ctrlKey && (e.key === '+' || e.key === '=' || e.code === 'Equal')) { e.preventDefault(); zoomIn(); }
   else if (e.ctrlKey && (e.key === '-' || e.code === 'Minus')) { e.preventDefault(); zoomOut(); }
   else if (e.ctrlKey && e.key === '0') { e.preventDefault(); zoomFit(); }
+  // Enter: xem trước crop nếu đang bật crop
+  else if (e.key === 'Enter' && state.opts.cropOn && selected()) { e.preventDefault(); toggleCropPreview(); }
+  // Escape: thoát crop preview
+  else if (e.key === 'Escape' && cropPreviewOn) { e.preventDefault(); exitCropPreview(); }
 });
+
+/* ---------------------------- Crop Preview ---------------------------- */
+let cropPreviewOn = false;
+
+function _setCropPreviewBtn(on) {
+  const btn = $('#btnCropPreview');
+  if (!btn) return;
+  btn.classList.toggle('active', on);
+  btn.innerHTML = on
+    ? `${icoSpan('eyeOff')} Thoát xem trước`
+    : `${icoSpan('eye')} Xem trước crop`;
+}
+
+function exitCropPreview() {
+  if (!cropPreviewOn) return;
+  cropPreviewOn = false;
+  _applyCropPreview();
+  _setCropPreviewBtn(false);
+}
+
+function toggleCropPreview() {
+  if (!state.opts.cropOn || !video.videoWidth || !selected()) return;
+  cropPreviewOn = !cropPreviewOn;
+  _applyCropPreview();
+  _setCropPreviewBtn(cropPreviewOn);
+}
+
+function _applyCropPreview() {
+  const stageInner = $('#stageInner');
+  const stage      = $('#stage');
+  if (!cropPreviewOn || !state.opts.cropOn || !video.videoWidth) {
+    video.style.width      = '';
+    video.style.marginLeft = '';
+    video.style.marginTop  = '';
+    stageInner.style.overflow = '';
+    stage.style.overflow      = '';
+    cropLayer.classList.remove('preview-hidden');
+    applyZoom(zoom.scale);
+    layoutCrop();
+    return;
+  }
+  const c  = state.opts.crop;
+  const vp = $('#stageViewport');
+  const vw = vp.clientWidth  - 2;
+  const vh = vp.clientHeight - 2;
+  const cpw = video.videoWidth  * c.w;
+  const cph = video.videoHeight * c.h;
+  if (cpw <= 0 || cph <= 0) return;
+  const fs   = Math.min(vw / cpw, vh / cph);
+  const fullW = Math.round(video.videoWidth  * fs);
+  const fullH = Math.round(video.videoHeight * fs);
+  const cW    = Math.round(cpw * fs);
+  const cH    = Math.round(cph * fs);
+  stageInner.style.width    = cW + 'px';
+  stageInner.style.height   = cH + 'px';
+  stageInner.style.overflow = 'hidden';
+  stage.style.overflow      = 'hidden';
+  video.style.width      = fullW + 'px';
+  video.style.marginLeft = -Math.round(c.x * fullW) + 'px';
+  video.style.marginTop  = -Math.round(c.y * fullH) + 'px';
+  cropLayer.classList.add('preview-hidden');
+  $('#zoomLabel').textContent     = Math.round(fs * 100) + '%';
+  $('#btnZoomReset').textContent  = Math.round(fs * 100) + '%';
+}
 
 /* ---------------------------- Crop overlay ---------------------------- */
 const cropLayer = $('#cropLayer');
-const cropBox = $('#cropBox');
+const cropBox   = $('#cropBox');
 function layoutCrop() {
   const vw = video.videoWidth;
   const vh = video.videoHeight;
@@ -1013,6 +1084,13 @@ $('#btnOpenFolder').addEventListener('click', () => {
 });
 $('#btnCancelExport').addEventListener('click', () => { $('#exLabel').textContent = 'Đang huỷ…'; api.cancelExport(); });
 $('#btnCloseExport').addEventListener('click', () => exModal.classList.remove('on'));
+
+// Crop preview button
+$('#btnCropPreview').addEventListener('click', toggleCropPreview);
+
+// Reset crop preview khi đổi video hoặc video load lại
+video.addEventListener('emptied', exitCropPreview);
+
 
 /* ---------------------------- Boot ---------------------------- */
 hydrateIcons();
