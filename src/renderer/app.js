@@ -1,4 +1,4 @@
-(function () {
+(async function () {
 'use strict';
 /* ============================================================
    VCut Studio — renderer
@@ -147,6 +147,45 @@ const state = {
   },
 };
 
+/* ---- Session persistence ---- */
+let _saveTimer = null;
+function saveSession() {
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(async () => {
+    try {
+      // Chuyển đổi order volatile-id → path-based để persist được
+      // Format: "whole:<path>" hoặc "seg:<path>:<segIndex>"
+      const orderPersist = state.order.map((oid) => {
+        if (oid.startsWith('whole:')) {
+          const src = getSource(oid.slice(6));
+          return src ? 'whole:' + src.info.path : null;
+        }
+        // tìm segment thuộc source nào
+        for (const s of state.sources) {
+          const idx = (state.segs[s.id] || []).findIndex((g) => g.id === oid);
+          if (idx >= 0) return 'seg:' + s.info.path + ':' + idx;
+        }
+        return null;
+      }).filter(Boolean);
+
+      const sessionData = {
+        sources: state.sources.map((s) => ({ path: s.info.path })),
+        selectedPath: state.selectedId ? (getSource(state.selectedId) || {}).info?.path || null : null,
+        segs: {},
+        order: orderPersist,
+        opts: { ...state.opts },
+      };
+      // segs keyed by filePath instead of volatile id
+      state.sources.forEach((s) => {
+        sessionData.segs[s.info.path] = (state.segs[s.id] || []).map((g) => ({
+          start: g.start, end: g.end,
+        }));
+      });
+      await api.saveSession(sessionData);
+    } catch (_) { /* noop — lưu session thất bại không hiện lỗi */ }
+  }, 800);
+}
+
 const video = $('#video');
 const getSource = (id) => state.sources.find((s) => s.id === id);
 const selected = () => getSource(state.selectedId);
@@ -279,6 +318,7 @@ async function addSources(paths) {
   if (firstNew && !state.selectedId) selectSource(firstNew.id);
   else if (firstNew) selectSource(firstNew.id);
   renderAll();
+  saveSession();
 }
 
 function removeSource(id) {
@@ -298,6 +338,7 @@ function removeSource(id) {
     }
   }
   renderAll();
+  saveSession();
 }
 
 function selectSource(id) {
@@ -715,7 +756,7 @@ cropLayer.addEventListener('pointerdown', (e) => {
   e.preventDefault();
 });
 cropLayer.addEventListener('pointermove', (e) => { if (cdrag) applyCropDrag(e.clientX - cdrag.x0, e.clientY - cdrag.y0); });
-['pointerup', 'pointercancel'].forEach((ev) => cropLayer.addEventListener(ev, () => { if (cdrag) { cdrag = null; updateOptionsUI(); } }));
+['pointerup', 'pointercancel'].forEach((ev) => cropLayer.addEventListener(ev, () => { if (cdrag) { cdrag = null; updateOptionsUI(); saveSession(); } }));
 
 function applyCropDrag(dx, dy) {
   const { W, H, r0, mode } = cdrag;
@@ -778,6 +819,7 @@ function applyCropPreset(r) {
     o.crop = { x: (1 - w) / 2, y: (1 - h) / 2, w, h };
   }
   updateOptionsUI();
+  saveSession();
 }
 
 /* ---------------------------- Event wiring ---------------------------- */
@@ -819,6 +861,7 @@ $('#btnAddCut').addEventListener('click', () => {
   const seg = addSeg(src, start, end);
   state.activeSegId = seg.id;
   renderAll();
+  saveSession();
   const inp = $(`.cut-row[data-id="${seg.id}"] [data-f="start"]`);
   if (inp) { inp.focus(); inp.select(); inp.closest('.cut-row').scrollIntoView({ block: 'nearest' }); }
 });
@@ -841,6 +884,7 @@ cutsList.addEventListener('change', (e) => {
   refreshRow(seg.id);
   renderOrder();
   renderSeekSegs();
+  saveSession();
 });
 cutsList.addEventListener('keydown', (e) => {
   const inp = e.target.matches('input[data-f]') ? e.target : null;
@@ -890,7 +934,7 @@ cutsList.addEventListener('click', (e) => {
   const row = btn.closest('.cut-row');
   const seg = state.segs[src.id].find((x) => x.id === row.dataset.id);
   const act = btn.dataset.act;
-  if (act === 'del') { removeSeg(src, seg.id); renderAll(); return; }
+  if (act === 'del') { removeSeg(src, seg.id); renderAll(); saveSession(); return; }
   if (act === 'play') {
     if (segIssue(seg, src)) { toast(segIssue(seg, src), 'err'); return; }
     playRange(seg); return;
@@ -901,6 +945,7 @@ cutsList.addEventListener('click', (e) => {
   refreshRow(seg.id, true);
   renderOrder();
   renderSeekSegs();
+  saveSession();
 });
 
 // paste modal
@@ -926,15 +971,16 @@ $('#btnPasteOk').addEventListener('click', () => {
   $('#pasteText').value = ''; $('#pasteInfo').textContent = '';
   pasteModal.classList.remove('on');
   renderAll();
+  saveSession();
 });
 $$('[data-close]', pasteModal).forEach((b) => b.addEventListener('click', () => pasteModal.classList.remove('on')));
 pasteModal.addEventListener('mousedown', (e) => { if (e.target === pasteModal) pasteModal.classList.remove('on'); });
 
 // options
-$('#optMute').addEventListener('click', () => { state.opts.mute = !state.opts.mute; updateOptionsUI(); });
-$('#optCrop').addEventListener('click', () => { state.opts.cropOn = !state.opts.cropOn; updateOptionsUI(); });
-$('#cropPresets').addEventListener('click', (e) => { const c = e.target.closest('.chip'); if (c) applyCropPreset(c.dataset.r); });
-$('#speedChips').addEventListener('click', (e) => { const c = e.target.closest('.chip'); if (c) { state.opts.speed = +c.dataset.s; updateOptionsUI(); renderOrder(); } });
+$('#optMute').addEventListener('click', () => { state.opts.mute = !state.opts.mute; updateOptionsUI(); saveSession(); });
+$('#optCrop').addEventListener('click', () => { state.opts.cropOn = !state.opts.cropOn; updateOptionsUI(); saveSession(); });
+$('#cropPresets').addEventListener('click', (e) => { const c = e.target.closest('.chip'); if (c) { applyCropPreset(c.dataset.r); saveSession(); } });
+$('#speedChips').addEventListener('click', (e) => { const c = e.target.closest('.chip'); if (c) { state.opts.speed = +c.dataset.s; updateOptionsUI(); renderOrder(); saveSession(); } });
 $('#rotateRow').addEventListener('click', (e) => {
   const b = e.target.closest('.tool'); if (!b) return;
   const o = state.opts;
@@ -943,15 +989,16 @@ $('#rotateRow').addEventListener('click', (e) => {
   if (b.dataset.act === 'fh') o.flipH = !o.flipH;
   if (b.dataset.act === 'fv') o.flipV = !o.flipV;
   updateOptionsUI();
+  saveSession();
 });
 $('#rotateHint').addEventListener('click', (e) => {
-  if (e.target.id === 'rotReset') { e.preventDefault(); Object.assign(state.opts, { rotate: 0, flipH: false, flipV: false }); updateOptionsUI(); }
+  if (e.target.id === 'rotReset') { e.preventDefault(); Object.assign(state.opts, { rotate: 0, flipH: false, flipV: false }); updateOptionsUI(); saveSession(); }
 });
-$('#outputSeg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { state.opts.output = b.dataset.v; updateOptionsUI(); } });
-$('#modeSeg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b && !b.disabled) { state.opts.mode = b.dataset.v; updateOptionsUI(); } });
-$('#qualitySeg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { state.opts.quality = b.dataset.v; updateOptionsUI(); } });
-$('#btnDir').addEventListener('click', async () => { const d = await api.pickFolder(); if (d) { state.opts.outDir = d; updateOptionsUI(); } });
-$('#btnDirReset').addEventListener('click', () => { state.opts.outDir = null; updateOptionsUI(); });
+$('#outputSeg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { state.opts.output = b.dataset.v; updateOptionsUI(); saveSession(); } });
+$('#modeSeg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b && !b.disabled) { state.opts.mode = b.dataset.v; updateOptionsUI(); saveSession(); } });
+$('#qualitySeg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { state.opts.quality = b.dataset.v; updateOptionsUI(); saveSession(); } });
+$('#btnDir').addEventListener('click', async () => { const d = await api.pickFolder(); if (d) { state.opts.outDir = d; updateOptionsUI(); saveSession(); } });
+$('#btnDirReset').addEventListener('click', () => { state.opts.outDir = null; updateOptionsUI(); saveSession(); });
 
 // order list drag & drop
 (function initOrderDnD() {
@@ -984,6 +1031,7 @@ $('#btnDirReset').addEventListener('click', () => { state.opts.outDir = null; up
     }
     dragId = null;
     renderOrder();
+    saveSession();
   });
   list.addEventListener('click', (e) => {
     const it = e.target.closest('.order-item'); if (!it) return;
@@ -1093,8 +1141,130 @@ video.addEventListener('emptied', exitCropPreview);
 
 
 /* ---------------------------- Boot ---------------------------- */
+async function restoreSession() {
+  try {
+    const r = await api.loadSession();
+    if (!r.ok || !r.session) return;
+    const sess = r.session;
+
+    // Khôi phục opts trước
+    if (sess.opts) {
+      Object.assign(state.opts, {
+        mute:      !!sess.opts.mute,
+        cropOn:    !!sess.opts.cropOn,
+        crop:      sess.opts.crop || state.opts.crop,
+        cropRatio: sess.opts.cropRatio ?? null,
+        rotate:    sess.opts.rotate || 0,
+        flipH:     !!sess.opts.flipH,
+        flipV:     !!sess.opts.flipV,
+        speed:     sess.opts.speed || 1,
+        output:    sess.opts.output || 'separate',
+        mode:      sess.opts.mode   || 'precise',
+        quality:   sess.opts.quality || 'high',
+        outDir:    sess.opts.outDir  || null,
+      });
+    }
+
+    // Probe lại từng file, bỏ qua file không còn tồn tại
+    const paths = (sess.sources || []).map((s) => s.path).filter(Boolean);
+    if (!paths.length) return;
+
+    // idMap[filePath] = newSrcId
+    const idMap = {};
+    let firstId = null;
+
+    for (const p of paths) {
+      const ex = await api.fileExists(p);
+      if (!ex.exists) continue;
+      const probe = await api.probe(p);
+      if (!probe.ok) continue;
+      const src = { id: newId('s'), info: probe.info, url: api.fileUrl(p), proxyUrl: null, proxied: false };
+      state.sources.push(src);
+      state.segs[src.id] = [];
+      idMap[p] = src.id;
+      if (!firstId) firstId = src.id;
+
+      // Khôi phục segments theo đúng thứ tự lưu
+      const savedSegs = sess.segs ? (sess.segs[p] || []) : [];
+      savedSegs.forEach((g) => {
+        const seg = { id: newId('c'), start: g.start, end: g.end, bad: {} };
+        state.segs[src.id].push(seg);
+      });
+    }
+
+    if (!state.sources.length) return;
+
+    // Khôi phục order từ format path-based
+    // Format: "whole:<path>" | "seg:<path>:<segIndex>"
+    const savedOrder = sess.order || [];
+    if (savedOrder.length) {
+      const newOrder = [];
+      const seen = new Set(); // tránh duplicate
+      savedOrder.forEach((oid) => {
+        if (oid.startsWith('whole:')) {
+          const p = oid.slice(6);
+          const srcId = idMap[p];
+          if (srcId && !seen.has('whole:' + srcId)) {
+            newOrder.push('whole:' + srcId);
+            seen.add('whole:' + srcId);
+          }
+        } else if (oid.startsWith('seg:')) {
+          // "seg:<path>:<index>"
+          const rest = oid.slice(4);
+          const lastColon = rest.lastIndexOf(':');
+          if (lastColon < 0) return;
+          const p = rest.slice(0, lastColon);
+          const idx = parseInt(rest.slice(lastColon + 1), 10);
+          const srcId = idMap[p];
+          if (!srcId) return;
+          const seg = (state.segs[srcId] || [])[idx];
+          if (seg && !seen.has(seg.id)) {
+            newOrder.push(seg.id);
+            seen.add(seg.id);
+          }
+        }
+      });
+
+      // Thêm vào order các source/seg chưa được đề cập trong savedOrder
+      state.sources.forEach((s) => {
+        const segs = state.segs[s.id];
+        if (segs.length) {
+          segs.forEach((g) => {
+            if (!seen.has(g.id)) { newOrder.push(g.id); seen.add(g.id); }
+          });
+        } else {
+          if (!seen.has('whole:' + s.id)) {
+            newOrder.push('whole:' + s.id);
+            seen.add('whole:' + s.id);
+          }
+        }
+      });
+
+      state.order = newOrder;
+    } else {
+      // Không có order lưu — build mặc định
+      state.sources.forEach((s) => {
+        const segs = state.segs[s.id];
+        if (segs.length) segs.forEach((g) => state.order.push(g.id));
+        else state.order.push('whole:' + s.id);
+      });
+    }
+
+    // Chọn video đã chọn lần trước
+    const selSrc = sess.selectedPath
+      ? state.sources.find((s) => s.info.path === sess.selectedPath)
+      : null;
+    if (selSrc) selectSource(selSrc.id);
+    else if (firstId) selectSource(firstId);
+
+  } catch (err) {
+    console.error('[restoreSession]', err);
+  }
+}
+
 hydrateIcons();
-renderAll();
 renderCropBox();
+await restoreSession();    // khôi phục session trước khi render
+renderAll();
 requestAnimationFrame(frame);
 })();

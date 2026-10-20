@@ -22,6 +22,11 @@ function savePrefs(data) {
   } catch (_) { /* noop */ }
 }
 
+/* -------------------- Session Persistence -------------------- */
+function sessionPath() {
+  return path.join(app.getPath('userData'), 'vcut-session.json');
+}
+
 // Tránh mở nhiều cửa sổ cùng dùng 1 thư mục cache (gây lỗi 'Unable to move the cache')
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -148,6 +153,33 @@ ipcMain.handle('export:cancel', () => {
 
 ipcMain.handle('shell:showItem', (_e, p) => shell.showItemInFolder(p));
 ipcMain.handle('shell:openPath', (_e, p) => shell.openPath(p));
+
+ipcMain.handle('session:save', (_e, sessionData) => {
+  try {
+    fs.writeFileSync(sessionPath(), JSON.stringify(sessionData), 'utf8');
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('session:load', () => {
+  try {
+    const raw = fs.readFileSync(sessionPath(), 'utf8');
+    return { ok: true, session: JSON.parse(raw) };
+  } catch (_) {
+    return { ok: true, session: null };
+  }
+});
+
+ipcMain.handle('file:exists', (_e, filePath) => {
+  try {
+    fs.accessSync(filePath, fs.constants.R_OK);
+    return { ok: true, exists: true };
+  } catch (_) {
+    return { ok: true, exists: false };
+  }
+});
 
 app.on('before-quit', () => {
   try { fs.rmSync(path.join(os.tmpdir(), 'vcut-proxy'), { recursive: true, force: true }); } catch (_) { /* noop */ }

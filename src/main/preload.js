@@ -17,6 +17,9 @@ contextBridge.exposeInMainWorld('api', {
   cancelExport: () => ipcRenderer.invoke('export:cancel'),
   showItem: (p) => ipcRenderer.invoke('shell:showItem', p),
   openPath: (p) => ipcRenderer.invoke('shell:openPath', p),
+  saveSession: (data) => ipcRenderer.invoke('session:save', data),
+  loadSession: () => ipcRenderer.invoke('session:load'),
+  fileExists: (p) => ipcRenderer.invoke('file:exists', p),
   pathForFile: (file) => {
     try { return webUtils.getPathForFile(file); } catch (_) { return file.path || ''; }
   },
