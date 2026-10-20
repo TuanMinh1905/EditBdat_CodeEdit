@@ -46,6 +46,7 @@ const ICONS = {
   maximize: '<path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/>',
   eye: '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>',
   eyeOff: '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>',
+  chevron: '<path d="M6 9l6 6 6-6"/>',
 };
 const svg = (n) => `<svg class="i" viewBox="0 0 24 24">${ICONS[n] || ''}</svg>`;
 function hydrateIcons(root = document) {
@@ -145,10 +146,15 @@ const state = {
     quality: 'high',
     outDir: null,
   },
+  ui: {
+    colRotate: true,   // true = expanded
+    colSpeed:  true,
+  },
 };
 
 /* ---- Session persistence ---- */
 let _saveTimer = null;
+let _collapseReady = false;
 function saveSession() {
   clearTimeout(_saveTimer);
   _saveTimer = setTimeout(async () => {
@@ -174,6 +180,7 @@ function saveSession() {
         segs: {},
         order: orderPersist,
         opts: { ...state.opts },
+        ui:   { ...state.ui },
       };
       // segs keyed by filePath instead of volatile id
       state.sources.forEach((s) => {
@@ -554,6 +561,11 @@ function updateOptionsUI() {
   $('#stageBadges').innerHTML = b.map((x) => `<span class="chip-badge">${x}</span>`).join('');
   layoutCrop();
   updateExportMeta();
+  // Cập nhật badge trên header collapsible (nếu đang thu gọn)
+  if (_collapseReady) {
+    applyCollapse('colRotate', state.ui.colRotate);
+    applyCollapse('colSpeed',  state.ui.colSpeed);
+  }
 }
 
 /* ---------------------------- Player ---------------------------- */
@@ -1164,6 +1176,11 @@ async function restoreSession() {
         outDir:    sess.opts.outDir  || null,
       });
     }
+    // Khôi phục trạng thái ẩn/hiện của collapsible sections
+    if (sess.ui) {
+      if (typeof sess.ui.colRotate === 'boolean') state.ui.colRotate = sess.ui.colRotate;
+      if (typeof sess.ui.colSpeed  === 'boolean') state.ui.colSpeed  = sess.ui.colSpeed;
+    }
 
     // Probe lại từng file, bỏ qua file không còn tồn tại
     const paths = (sess.sources || []).map((s) => s.path).filter(Boolean);
@@ -1266,5 +1283,59 @@ hydrateIcons();
 renderCropBox();
 await restoreSession();    // khôi phục session trước khi render
 renderAll();
+
+/* ---- Collapsible sections (Xoay/Lật & Tốc độ phát) ---- */
+function applyCollapse(key, expanded) {
+  state.ui[key] = expanded;
+  const bodyId  = key === 'colRotate' ? 'colRotateBody' : 'colSpeedBody';
+  const btnId   = key === 'colRotate' ? 'btnColRotate'  : 'btnColSpeed';
+  const body = $('#' + bodyId);
+  const btn  = $('#' + btnId);
+  if (!body || !btn) return;
+  body.classList.toggle('collapsed', !expanded);
+  btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+
+  // Badge: hiển thị trạng thái active khi đang thu gọn
+  const existingBadge = btn.querySelector('.collapsible-badge');
+  if (existingBadge) existingBadge.remove();
+  if (!expanded) {
+    const o = state.opts;
+    let label = '';
+    if (key === 'colRotate') {
+      const parts = [];
+      if (o.rotate) parts.push(o.rotate + '°');
+      if (o.flipH)  parts.push('Ngang');
+      if (o.flipV)  parts.push('Dọc');
+      if (parts.length) label = parts.join(' • ');
+    } else if (key === 'colSpeed') {
+      if (Math.abs(o.speed - 1) > 1e-6) label = o.speed + '×';
+    }
+    if (label) {
+      const badge = document.createElement('span');
+      badge.className = 'collapsible-badge';
+      badge.textContent = label;
+      btn.querySelector('.collapsible-title').after(badge);
+    }
+  }
+}
+
+function initCollapsible() {
+  [
+    { btnId: 'btnColRotate', key: 'colRotate' },
+    { btnId: 'btnColSpeed',  key: 'colSpeed'  },
+  ].forEach(({ btnId, key }) => {
+    const btn = $('#' + btnId);
+    if (!btn) return;
+    // Áp dụng trạng thái khởi đầu từ state.ui
+    applyCollapse(key, state.ui[key]);
+    btn.addEventListener('click', () => {
+      applyCollapse(key, !state.ui[key]);
+      saveSession();
+    });
+  });
+  _collapseReady = true;
+}
+initCollapsible();
+
 requestAnimationFrame(frame);
 })();

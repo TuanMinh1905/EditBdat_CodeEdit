@@ -155,26 +155,40 @@
             </div>
           </div>
 
-          <div class="group-title" style="margin-top:14px">Xoay / Lật</div>
-          <div class="tool-row" id="rotateRow">
-            <button class="tool" data-act="ccw"><span class="i" data-i="ccw"></span>Trái 90°</button>
-            <button class="tool" data-act="cw"><span class="i" data-i="cw"></span>Phải 90°</button>
-            <button class="tool" data-act="fh"><span class="i" data-i="fliph"></span>Lật ngang</button>
-            <button class="tool" data-act="fv"><span class="i" data-i="flipv"></span>Lật dọc</button>
+          <div class="collapsible" id="colRotate">
+            <button class="collapsible-head" id="btnColRotate" aria-expanded="true">
+              <span class="collapsible-title">Xoay / Lật</span>
+              <span class="collapsible-chevron" data-i="chevron"></span>
+            </button>
+            <div class="collapsible-body" id="colRotateBody">
+              <div class="tool-row" id="rotateRow">
+                <button class="tool" data-act="ccw"><span class="i" data-i="ccw"></span>Trái 90°</button>
+                <button class="tool" data-act="cw"><span class="i" data-i="cw"></span>Phải 90°</button>
+                <button class="tool" data-act="fh"><span class="i" data-i="fliph"></span>Lật ngang</button>
+                <button class="tool" data-act="fv"><span class="i" data-i="flipv"></span>Lật dọc</button>
+              </div>
+              <div class="hint" id="rotateHint"></div>
+            </div>
           </div>
-          <div class="hint" id="rotateHint"></div>
 
-          <div class="group-title" style="margin-top:14px">Tốc độ phát</div>
-          <div class="chips" id="speedChips">
-            <button class="chip" data-s="0.25">0.25×</button>
-            <button class="chip" data-s="0.5">0.5×</button>
-            <button class="chip" data-s="0.75">0.75×</button>
-            <button class="chip on" data-s="1">1×</button>
-            <button class="chip" data-s="1.25">1.25×</button>
-            <button class="chip" data-s="1.5">1.5×</button>
-            <button class="chip" data-s="2">2×</button>
-            <button class="chip" data-s="3">3×</button>
-            <button class="chip" data-s="4">4×</button>
+          <div class="collapsible" id="colSpeed">
+            <button class="collapsible-head" id="btnColSpeed" aria-expanded="true">
+              <span class="collapsible-title">Tốc độ phát</span>
+              <span class="collapsible-chevron" data-i="chevron"></span>
+            </button>
+            <div class="collapsible-body" id="colSpeedBody">
+              <div class="chips" id="speedChips">
+                <button class="chip" data-s="0.25">0.25×</button>
+                <button class="chip" data-s="0.5">0.5×</button>
+                <button class="chip" data-s="0.75">0.75×</button>
+                <button class="chip on" data-s="1">1×</button>
+                <button class="chip" data-s="1.25">1.25×</button>
+                <button class="chip" data-s="1.5">1.5×</button>
+                <button class="chip" data-s="2">2×</button>
+                <button class="chip" data-s="3">3×</button>
+                <button class="chip" data-s="4">4×</button>
+              </div>
+            </div>
           </div>
         </div>
 
