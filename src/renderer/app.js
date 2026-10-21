@@ -1302,21 +1302,6 @@ async function restoreSession() {
         }
       });
 
-      // Thêm vào order các source/seg chưa được đề cập trong savedOrder
-      state.sources.forEach((s) => {
-        const segs = state.segs[s.id];
-        if (segs.length) {
-          segs.forEach((g) => {
-            if (!seen.has(g.id)) { newOrder.push(g.id); seen.add(g.id); }
-          });
-        } else {
-          if (!seen.has('whole:' + s.id)) {
-            newOrder.push('whole:' + s.id);
-            seen.add('whole:' + s.id);
-          }
-        }
-      });
-
       state.order = newOrder;
     } else {
       // Không có order lưu — build mặc định
