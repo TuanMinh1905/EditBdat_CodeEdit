@@ -1,4 +1,4 @@
-﻿/* ============================================================
+/* ============================================================
    VCut Studio — Design system
    ============================================================ */
 :root {
@@ -251,7 +251,7 @@ kbd {
 .cuts { display: flex; flex-direction: column; max-height: 36vh; min-height: 150px; }
 .cuts .panel-body { padding: 8px 12px 12px; }
 .cut-row {
-  display: grid; grid-template-columns: 30px 1fr 18px 1fr 70px auto; gap: 8px; align-items: center;
+  display: grid; grid-template-columns: 30px 1fr 18px 1fr 76px auto; gap: 8px; align-items: center;
   padding: 7px 8px; border-radius: 11px; border: 1px solid transparent; transition: background .15s, border-color .15s; animation: pop .25s ease both;
 }
 .cut-row:hover { background: var(--surface); }
@@ -263,7 +263,10 @@ kbd {
 .tf input { background: none; border: none; outline: none; padding: 7px 9px; width: 100%; font-family: var(--mono); font-size: 13px; min-width: 0; }
 .tf .icon-btn { width: 26px; height: 26px; margin-right: 3px; }
 .arrow { color: var(--faint); text-align: center; }
-.cut-dur { font-family: var(--mono); font-size: 12px; color: var(--accent-2); text-align: right; }
+.cut-dur { position: relative; }
+.cut-dur input { color: var(--accent-2); text-align: right; padding-right: 20px; font-size: 12.5px; }
+.cut-dur::after { content: 's'; position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-family: var(--mono); font-size: 11px; color: var(--faint); pointer-events: none; }
+.cut-dur.locked { border-color: rgba(91, 141, 255, .55); }
 .cut-act { display: flex; gap: 2px; }
 .cuts-foot { display: flex; gap: 8px; }
 .cuts-head-note { font-size: 11.5px; color: var(--faint); font-weight: 500; text-transform: none; letter-spacing: 0; }

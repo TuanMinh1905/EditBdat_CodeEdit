@@ -1,4 +1,4 @@
-﻿(async function () {
+(async function () {
 'use strict';
 /* ============================================================
    VCut Studio — renderer
@@ -403,6 +403,36 @@ function segIssue(seg, src) {
   if (seg.start >= src.info.duration) return 'Bắt đầu vượt quá độ dài video';
   return null;
 }
+/** Hiển thị độ dài dạng giây: "5" | "5.5" | "75.25" */
+function fmtDurSec(d) {
+  d = Math.max(0, Math.round(d * 100) / 100);
+  return String(d);
+}
+/**
+ * Ghi giá trị một ô (start / end / dur) vào seg.
+ * - dur: đặt end = start + dur và "khoá" độ dài → đổi điểm đầu sau đó end tự chạy theo.
+ * - start: nếu đang khoá độ dài thì end = start + durLock.
+ * - end: nhập tay → bỏ khoá độ dài.
+ */
+function applySegField(seg, src, f, raw) {
+  const v = parseTime(raw);
+  const maxDur = src.info.duration;
+  if (v == null || (f === 'dur' && v <= 0)) { seg.bad[f] = true; return false; }
+  seg.bad[f] = false;
+  if (f === 'dur') {
+    seg.durLock = v;
+    seg.end = Math.min(seg.start + v, maxDur);
+    seg.bad.end = false;
+    if (seg.start + v > maxDur + 0.001) toast(`Video chỉ dài ${fmtTime(maxDur)} — điểm cuối được đặt ở cuối video`, 'err');
+  } else if (f === 'start') {
+    seg.start = v;
+    if (seg.durLock) { seg.end = Math.min(v + seg.durLock, maxDur); seg.bad.end = false; }
+  } else {
+    seg.end = Math.min(v, maxDur);
+    seg.durLock = null;
+  }
+  return true;
+}
 
 /* ---------------------------- Rendering ---------------------------- */
 function renderAll() {
@@ -452,7 +482,8 @@ function renderCuts() {
       <span class="arrow">→</span>
       <div class="tf" data-field="end"><input data-f="end" value="${fmtTime(g.end)}" placeholder="0:00" spellcheck="false" />
         <button class="icon-btn" data-act="setEnd" title="Lấy thời điểm hiện tại của video">${svg('locate')}</button></div>
-      <span class="cut-dur"></span>
+      <div class="tf cut-dur ${g.durLock ? 'locked' : ''}" data-field="dur" title="Độ dài (giây) — nhập số giây để tự đặt điểm cuối = điểm đầu + độ dài">
+        <input data-f="dur" placeholder="giây" spellcheck="false" /></div>
       <div class="cut-act">
         <button class="icon-btn" data-act="play" title="Xem thử đoạn này">${svg('play')}</button>
         <button class="icon-btn danger" data-act="del" title="Xoá đoạn">${svg('trash')}</button>
@@ -474,7 +505,12 @@ function refreshRow(segId, writeInputs = false) {
   const issue = segIssue(seg, src);
   $('[data-field="start"]', row).classList.toggle('bad', !!seg.bad.start || (!!issue && seg.end <= seg.start));
   $('[data-field="end"]', row).classList.toggle('bad', !!seg.bad.end || (!!issue && seg.end <= seg.start));
-  $('.cut-dur', row).textContent = issue ? '—' : fmtTime(Math.min(seg.end, src.info.duration) - seg.start);
+  const durInp = $('[data-f="dur"]', row);
+  if (durInp && (writeInputs || document.activeElement !== durInp)) {
+    durInp.value = issue ? '' : fmtDurSec(Math.min(seg.end, src.info.duration) - seg.start);
+  }
+  $('[data-field="dur"]', row).classList.toggle('locked', !!seg.durLock);
+  $('[data-field="dur"]', row).classList.toggle('bad', !!seg.bad.dur);
   row.title = issue || '';
 }
 
@@ -979,14 +1015,8 @@ cutsList.addEventListener('change', (e) => {
   const row = inp.closest('.cut-row');
   const seg = state.segs[src.id].find((x) => x.id === row.dataset.id);
   const f = inp.dataset.f;
-  const v = parseTime(inp.value);
-  if (v == null) { seg.bad[f] = true; }
-  else {
-    seg.bad[f] = false;
-    seg[f] = f === 'end' ? Math.min(v, src.info.duration) : v;
-    inp.value = fmtTime(seg[f]);
-  }
-  refreshRow(seg.id);
+  applySegField(seg, src, f, inp.value);
+  refreshRow(seg.id, true);
   renderOrder();
   renderSeekSegs();
   saveSession();
@@ -1001,24 +1031,19 @@ cutsList.addEventListener('keydown', (e) => {
     const seg = state.segs[src.id].find((x) => x.id === row.dataset.id);
     const f = inp.dataset.f;
     // Commit giá trị hiện tại ngay (giống blur/change)
-    const v = parseTime(inp.value);
-    if (v == null) { seg.bad[f] = true; }
-    else {
-      seg.bad[f] = false;
-      seg[f] = f === 'end' ? Math.min(v, src.info.duration) : v;
-      inp.value = fmtTime(seg[f]);
-    }
-    refreshRow(seg.id);
+    applySegField(seg, src, f, inp.value);
+    refreshRow(seg.id, true);
     renderOrder();
     renderSeekSegs();
+    saveSession();
     // Seek video đến điểm phù hợp
     if (!segIssue(seg, src)) {
       seekTo(f === 'start' ? seg.start : Math.min(seg.end, src.info.duration) - 0.05);
     }
-    // Chuyển focus: start → end → nút Play của row
+    // Chuyển focus: start → dur → nút Play của row (ô end vẫn sửa tay được)
     if (f === 'start') {
-      const endInp = row.querySelector('input[data-f="end"]');
-      if (endInp) { endInp.focus(); endInp.select(); }
+      const durInp = row.querySelector('input[data-f="dur"]');
+      if (durInp) { durInp.focus(); durInp.select(); }
     } else {
       const playBtn = row.querySelector('[data-act="play"]');
       if (playBtn) playBtn.focus();
@@ -1045,8 +1070,11 @@ cutsList.addEventListener('click', (e) => {
     playRange(seg); return;
   }
   const t = Math.round((video.currentTime || 0) * 100) / 100;
-  if (act === 'setStart') { seg.start = t; seg.bad.start = false; }
-  if (act === 'setEnd') { seg.end = t; seg.bad.end = false; }
+  if (act === 'setStart') {
+    seg.start = t; seg.bad.start = false;
+    if (seg.durLock) { seg.end = Math.min(t + seg.durLock, src.info.duration); seg.bad.end = false; }
+  }
+  if (act === 'setEnd') { seg.end = t; seg.bad.end = false; seg.durLock = null; }
   refreshRow(seg.id, true);
   renderOrder();
   renderSeekSegs();
