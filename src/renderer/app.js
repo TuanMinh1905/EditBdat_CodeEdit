@@ -1,4 +1,4 @@
-(async function () {
+﻿(async function () {
 'use strict';
 /* ============================================================
    VCut Studio — renderer
@@ -130,6 +130,7 @@ const state = {
   selectedId: null,
   segs: {},             // sourceId -> [{id,start,end,bad:{start,end}}]
   order: [],            // id của item: segId hoặc 'whole:<sourceId>'
+  unchecked: new Set(), // id các item BỎ chọn (mặc định rỗng = chọn tất cả)
   activeSegId: null,
   playRangeEnd: null,
   opts: {
@@ -145,6 +146,7 @@ const state = {
     mode: 'precise',
     quality: 'high',
     outDir: null,
+    outName: '',
   },
   ui: {
     colRotate: true,   // true = expanded
@@ -300,6 +302,7 @@ function resolveItem(id) {
   return null;
 }
 const allItems = () => state.order.map(resolveItem).filter(Boolean);
+const checkedItems = () => allItems().filter((it) => !state.unchecked.has(it.id));
 const belongs = (sid, id) => id === 'whole:' + sid || (state.segs[sid] || []).some((s) => s.id === id);
 
 function needsReencode() {
@@ -324,6 +327,13 @@ async function addSources(paths) {
   }
   if (firstNew && !state.selectedId) selectSource(firstNew.id);
   else if (firstNew) selectSource(firstNew.id);
+  // Tự điền tên file nếu chưa có
+  if (firstNew && !state.opts.outName.trim()) {
+    const autoName = basename(firstNew.info.path).replace(/\.[^.]+$/, '');
+    state.opts.outName = autoName;
+    $('#outNameInput').value = autoName;
+    updateNameHint();
+  }
   renderAll();
   saveSession();
 }
@@ -475,15 +485,18 @@ function renderOrder() {
   el.innerHTML = items.map((it, i) => {
     const d = it.start == null ? it.source.info.duration : Math.max(0, Math.min(it.end, it.source.info.duration) - it.start);
     const rng = it.start == null ? `Cả video • ${fmtTime(d)}` : `${fmtTime(it.start)} → ${fmtTime(it.end)} • ${fmtTime(d)}`;
-    return `<div class="order-item" draggable="true" data-id="${it.id}">
+    const on = !state.unchecked.has(it.id);
+    return `<div class="order-item ${on ? '' : 'off'}" draggable="true" data-id="${it.id}">
+      <input type="checkbox" class="order-chk" ${on ? 'checked' : ''} title="Chọn để xuất / ghép" />
       <span class="grip">${svg('grip')}</span><span class="order-n">${String(i + 1).padStart(2, '0')}</span>
       <div class="order-t"><b>${esc(basename(it.source.info.path))}</b><span>${rng}</span></div></div>`;
   }).join('');
-  const total = items.reduce((a, it) => {
+  const sel = items.filter((it) => !state.unchecked.has(it.id));
+  const total = sel.reduce((a, it) => {
     const d = it.start == null ? it.source.info.duration : Math.max(0, Math.min(it.end, it.source.info.duration) - it.start);
     return a + d / state.opts.speed;
   }, 0);
-  $('#orderSum').textContent = `${items.length} phần • tổng khoảng ${fmtTime(total)}`;
+  $('#orderSum').textContent = `Đã chọn ${sel.length}/${items.length} phần • tổng khoảng ${fmtTime(total)}`;
   updateExportMeta();
 }
 
@@ -497,13 +510,32 @@ function renderSeekSegs() {
 }
 
 function updateExportMeta() {
-  const n = allItems().length;
+  const n = checkedItems().length;
   const o = state.opts.output;
   const parts = [];
   if (o === 'separate' || o === 'both') parts.push(`${n} file riêng`);
   if (o === 'merge' || o === 'both') parts.push('1 file ghép');
   $('#exportMeta').textContent = n ? `Sẽ tạo: ${parts.join(' + ')} (MP4 • H.264)` : '';
   $('#btnExport').disabled = !n;
+  updateNameHint();
+}
+
+function updateNameHint() {
+  const name = state.opts.outName.trim();
+  const hint = $('#nameHint');
+  const items = checkedItems();
+  const n = items.length;
+  const o = state.opts.output;
+  if (!name || !n) { hint.textContent = ''; return; }
+  const wantSep = o === 'separate' || o === 'both';
+  const wantMerge = (o === 'merge' || o === 'both') && n >= 1;
+  const parts = [];
+  if (wantSep) {
+    if (n === 1) parts.push(`${name}.mp4`);
+    else parts.push(`${name}_1.mp4, ${name}_2.mp4` + (n > 2 ? ` … ${name}_${n}.mp4` : ''));
+  }
+  if (wantMerge) parts.push(`${name}_merged.mp4`);
+  hint.textContent = parts.length ? `→ ${parts.join(' + ')}` : '';
 }
 
 function updateOptionsUI() {
@@ -550,6 +582,7 @@ function updateOptionsUI() {
   $('#dirLabel').textContent = o.outDir ? o.outDir : 'Lưu cạnh video gốc';
   $('#dirLabel').title = o.outDir || '';
   $('#btnDirReset').style.display = o.outDir ? '' : 'none';
+  if ($('#outNameInput').value !== o.outName) $('#outNameInput').value = o.outName || '';
 
   // badges trên khung preview
   const b = [];
@@ -1071,6 +1104,14 @@ $('#modeSeg').addEventListener('click', (e) => { const b = e.target.closest('but
 $('#qualitySeg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { state.opts.quality = b.dataset.v; updateOptionsUI(); saveSession(); } });
 $('#btnDir').addEventListener('click', async () => { const d = await api.pickFolder(); if (d) { state.opts.outDir = d; updateOptionsUI(); saveSession(); } });
 $('#btnDirReset').addEventListener('click', () => { state.opts.outDir = null; updateOptionsUI(); saveSession(); });
+$('#outNameInput').addEventListener('input', () => { state.opts.outName = $('#outNameInput').value; updateNameHint(); saveSession(); });
+
+const setAllChecked = (on) => {
+  state.unchecked = on ? new Set() : new Set(state.order);
+  renderOrder();
+};
+$('#btnOrderAll').addEventListener('click', () => setAllChecked(true));
+$('#btnOrderNone').addEventListener('click', () => setAllChecked(false));
 
 // order list drag & drop
 (function initOrderDnD() {
@@ -1105,7 +1146,14 @@ $('#btnDirReset').addEventListener('click', () => { state.opts.outDir = null; up
     renderOrder();
     saveSession();
   });
+  list.addEventListener('change', (e) => {
+    if (!e.target.classList.contains('order-chk')) return;
+    const it = e.target.closest('.order-item'); if (!it) return;
+    if (e.target.checked) state.unchecked.delete(it.dataset.id); else state.unchecked.add(it.dataset.id);
+    renderOrder();
+  });
   list.addEventListener('click', (e) => {
+    if (e.target.classList.contains('order-chk')) return;
     const it = e.target.closest('.order-item'); if (!it) return;
     const r = resolveItem(it.dataset.id);
     if (!r) return;
@@ -1119,8 +1167,8 @@ const exModal = $('#exportModal');
 let lastResults = [];
 
 function buildJob() {
-  const items = allItems();
-  if (!items.length) throw new Error('Chưa có video/đoạn nào để xuất.');
+  const items = checkedItems();
+  if (!items.length) throw new Error('Chưa chọn video/đoạn nào để xuất.');
   const o = state.opts;
   if ((o.output === 'merge' || o.output === 'both') && items.length < 2) throw new Error('Cần ít nhất 2 phần (video hoặc đoạn cắt) để ghép.');
   const sources = {};
@@ -1142,6 +1190,7 @@ function buildJob() {
       crop: o.cropOn && validCrop() ? { x: clamp(c.x, 0, 1), y: clamp(c.y, 0, 1), w: clamp(c.w, 0.01, 1), h: clamp(c.h, 0.01, 1) } : null,
       rotate: o.rotate, flipH: o.flipH, flipV: o.flipV, speed: o.speed,
       mode: effectiveMode(), quality: o.quality, output: o.output, outDir: o.outDir,
+      outName: o.outName ? o.outName.trim() : '',
     },
   };
 }
@@ -1234,6 +1283,7 @@ async function restoreSession() {
         mode:      sess.opts.mode   || 'precise',
         quality:   sess.opts.quality || 'high',
         outDir:    sess.opts.outDir  || null,
+        outName:   sess.opts.outName || '',
       });
     }
     // Khôi phục trạng thái ẩn/hiện của collapsible sections

@@ -214,6 +214,13 @@
             </div>
           </div>
 
+          <div class="group-title" style="margin-top:14px">Tên file xuất</div>
+          <div class="name-row">
+            <input type="text" id="outNameInput" class="name-input" placeholder="Tên file (VD: video_cat)" spellcheck="false" />
+            <span class="name-ext">.mp4</span>
+          </div>
+          <div class="name-hint" id="nameHint"></div>
+
           <div class="dir-row">
             <div class="dir-label" id="dirLabel">Lưu cạnh video gốc</div>
             <button class="btn sm" id="btnDir"><span data-i="folder"></span></button>
@@ -222,7 +229,8 @@
         </div>
 
         <div class="group">
-          <div class="group-title">Thứ tự xuất / ghép <span style="text-transform:none;letter-spacing:0;font-weight:500">(kéo để đổi)</span></div>
+          <div class="group-title order-head"><span>Thứ tự xuất / ghép <span style="text-transform:none;letter-spacing:0;font-weight:500">(kéo để đổi)</span></span>
+            <span class="order-tools"><button class="btn ghost" id="btnOrderAll" type="button">Chọn tất cả</button><button class="btn ghost" id="btnOrderNone" type="button">Bỏ chọn tất cả</button></span></div>
           <div class="order-list" id="orderList"></div>
           <div class="order-sum" id="orderSum"></div>
         </div>

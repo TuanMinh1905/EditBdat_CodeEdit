@@ -194,7 +194,7 @@ async function runJob(job, onProgress) {
   cancelFlag = false;
   const o = Object.assign(
     { mute: false, crop: null, rotate: 0, flipH: false, flipV: false, speed: 1,
-      mode: 'precise', quality: 'high', output: 'separate', outDir: null },
+      mode: 'precise', quality: 'high', output: 'separate', outDir: null, outName: '' },
     job.options || {}
   );
   const items = job.items;
@@ -231,9 +231,16 @@ async function runJob(job, onProgress) {
 
   // ---- đặt tên đoạn ----
   const perSourceCounter = {};
-  const nameFor = (it) => {
+  const customName = (o.outName || '').trim();
+  const nameFor = (it, idx, total) => {
     const s = sources[it.sourceId];
     const dir = o.outDir || path.dirname(s.path);
+    if (customName) {
+      // Tên do người dùng tự đặt
+      if (total === 1) return path.join(dir, `${customName}.mp4`);
+      return path.join(dir, `${customName}_${idx + 1}.mp4`);
+    }
+    // Tên tự động theo video gốc (hành vi cũ)
     const base = path.basename(s.path, path.extname(s.path));
     if (it.start == null && it.end == null) return path.join(dir, `${base}_edited.mp4`);
     perSourceCounter[it.sourceId] = (perSourceCounter[it.sourceId] || 0) + 1;
@@ -279,7 +286,7 @@ async function runJob(job, onProgress) {
       if (cancelFlag) throw Object.assign(new Error('Đã huỷ'), { cancelled: true });
       const it = items[i];
       const s = sources[it.sourceId];
-      const outPath = uniquePath(nameFor(it));
+      const outPath = uniquePath(nameFor(it, i, items.length));
       const label = `${path.basename(s.path)} • ${it.start == null ? 'cả video' : fmtLabel(it.start) + ' → ' + fmtLabel(it.end)}`;
       report(0, label);
       try {
@@ -301,8 +308,8 @@ async function runJob(job, onProgress) {
     const srcList = items.map((it) => sources[it.sourceId]);
     const first = srcList[0];
     const dir = o.outDir || path.dirname(first.path);
-    const base = path.basename(first.path, path.extname(first.path));
-    const outPath = uniquePath(path.join(dir, `${base}_merged.mp4`));
+    const mergeBase = customName || path.basename(first.path, path.extname(first.path));
+    const outPath = uniquePath(path.join(dir, `${mergeBase}_merged.mp4`));
 
     // chế độ ghép
     let mMode = mode;
