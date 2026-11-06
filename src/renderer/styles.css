@@ -372,6 +372,15 @@ kbd {
 .order-item .grip { color: var(--faint); font-size: 14px; }
 .order-chk { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; margin: 0; }
 .order-item.off { opacity: .5; }
+.order-item.active { border-color: rgba(52, 211, 153, .55); background: rgba(52, 211, 153, .1); box-shadow: inset 3px 0 0 var(--ok); }
+.order-item.active .order-n { color: var(--ok); }
+.order-item.off.active { opacity: .8; }
+.order-item.flash { animation: orderFlash 1s ease; }
+@keyframes orderFlash {
+  0%   { transform: scale(1); box-shadow: inset 3px 0 0 var(--ok), 0 0 0 0 rgba(52, 211, 153, .7); }
+  25%  { transform: scale(1.03); box-shadow: inset 3px 0 0 var(--ok), 0 0 0 5px rgba(52, 211, 153, .35); }
+  100% { transform: scale(1); box-shadow: inset 3px 0 0 var(--ok), 0 0 0 10px rgba(52, 211, 153, 0); }
+}
 .order-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .order-tools { display: flex; gap: 4px; text-transform: none; letter-spacing: 0; }
 .order-tools .btn { padding: 3px 8px; font-size: 11px; }

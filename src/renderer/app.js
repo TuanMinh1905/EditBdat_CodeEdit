@@ -522,7 +522,7 @@ function renderOrder() {
     const d = it.start == null ? it.source.info.duration : Math.max(0, Math.min(it.end, it.source.info.duration) - it.start);
     const rng = it.start == null ? `Cả video • ${fmtTime(d)}` : `${fmtTime(it.start)} → ${fmtTime(it.end)} • ${fmtTime(d)}`;
     const on = !state.unchecked.has(it.id);
-    return `<div class="order-item ${on ? '' : 'off'}" draggable="true" data-id="${it.id}">
+    return `<div class="order-item ${on ? '' : 'off'} ${it.id === state.activeSegId ? 'active' : ''}" draggable="true" data-id="${it.id}">
       <input type="checkbox" class="order-chk" ${on ? 'checked' : ''} title="Chọn để xuất / ghép" />
       <span class="grip">${svg('grip')}</span><span class="order-n">${String(i + 1).padStart(2, '0')}</span>
       <div class="order-t"><b>${esc(basename(it.source.info.path))}</b><span>${rng}</span></div></div>`;
@@ -534,6 +534,25 @@ function renderOrder() {
   }, 0);
   $('#orderSum').textContent = `Đã chọn ${sel.length}/${items.length} phần • tổng khoảng ${fmtTime(total)}`;
   updateExportMeta();
+}
+
+/**
+ * Đánh dấu mục tương ứng với đoạn đang chọn ở cột "Thứ tự xuất / ghép".
+ * @param {string|null} segId
+ * @param {boolean} flash  true → cuộn tới + chạy hiệu ứng nháy sáng
+ */
+function highlightOrderItem(segId, flash = true) {
+  let target = null;
+  $$('#orderList .order-item').forEach((el) => {
+    const hit = !!segId && el.dataset.id === segId;
+    el.classList.toggle('active', hit);
+    if (hit) target = el;
+  });
+  if (!target || !flash) return;
+  target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  target.classList.remove('flash');
+  void target.offsetWidth; // reflow để chạy lại animation
+  target.classList.add('flash');
 }
 
 function renderSeekSegs() {
@@ -1050,12 +1069,23 @@ cutsList.addEventListener('keydown', (e) => {
     }
   }
 });
-cutsList.addEventListener('focusin', (e) => {
-  const row = e.target.closest('.cut-row');
-  if (!row || row.dataset.id === state.activeSegId) return;
+function setActiveSeg(row) {
+  if (!row) return;
+  const changed = row.dataset.id !== state.activeSegId;
   state.activeSegId = row.dataset.id;
   $$('.cut-row').forEach((r) => r.classList.toggle('active', r === row));
   renderSeekSegs();
+  if (changed) highlightOrderItem(state.activeSegId);
+}
+cutsList.addEventListener('focusin', (e) => {
+  setActiveSeg(e.target.closest('.cut-row'));
+});
+cutsList.addEventListener('mousedown', (e) => {
+  const row = e.target.closest('.cut-row');
+  if (!row) return;
+  // Bấm lại vào đoạn đang chọn → vẫn nháy sáng để dễ nhìn
+  if (row.dataset.id === state.activeSegId) highlightOrderItem(state.activeSegId);
+  else setActiveSeg(row);
 });
 cutsList.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-act]');
@@ -1186,7 +1216,7 @@ $('#btnOrderNone').addEventListener('click', () => setAllChecked(false));
     const r = resolveItem(it.dataset.id);
     if (!r) return;
     if (r.sourceId !== state.selectedId) selectSource(r.sourceId);
-    if (r.seg) { state.activeSegId = r.seg.id; renderCuts(); renderSeekSegs(); const doSeek = () => seekTo(r.seg.start); if (video.readyState >= 1) doSeek(); else video.addEventListener('loadedmetadata', doSeek, { once: true }); }
+    if (r.seg) { state.activeSegId = r.seg.id; renderCuts(); renderSeekSegs(); highlightOrderItem(r.seg.id, false); const doSeek = () => seekTo(r.seg.start); if (video.readyState >= 1) doSeek(); else video.addEventListener('loadedmetadata', doSeek, { once: true }); }
   });
 })();
 
